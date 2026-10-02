@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#09090b">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Financeiro">
+  <link rel="icon" type="image/png" href="icons/favicon.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <title>Controle Financeiro</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topo">
+    <div class="topo-in">
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h13v3"/><path d="M3 7v11a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-3"/><path d="M21 12v4h-4a2 2 0 0 1 0-4z"/></svg>
+      </div>
+      <div class="titulo">
+        <h1>Controle Financeiro</h1>
+        <p>Gestão de contas mensais</p>
+      </div>
+      <button id="btnTema" class="btn-icone" type="button" aria-label="Alternar tema"></button>
+      <button id="btnNova" class="btn-primario" type="button">+ <span>Nova</span></button>
+    </div>
+  </header>
+
+  <main class="conteudo">
+    <section class="card progresso">
+      <div class="linha"><span class="rotulo">↗ Progresso do mês</span><strong id="pPct">0%</strong></div>
+      <div class="barra"><div id="pBarra"></div></div>
+    </section>
+
+    <section class="resumo">
+      <article class="card total"><span class="rotulo">Total no mês</span><strong id="vTotal">R$ 0,00</strong><small id="cTotal">0 conta(s)</small></article>
+      <article class="card pagas"><span class="rotulo">Pagas</span><strong id="vPagas">R$ 0,00</strong><small id="cPagas">0 conta(s)</small></article>
+      <article class="card pend"><span class="rotulo">Pendentes</span><strong id="vPend">R$ 0,00</strong><small id="cPend">0 conta(s)</small></article>
+      <article class="card venc"><span class="rotulo">Vencidas</span><strong id="vVenc">R$ 0,00</strong><small id="cVenc">0 conta(s)</small></article>
+    </section>
+
+    <section class="filtros">
+      <input id="busca" type="search" placeholder="Buscar conta...">
+      <select id="fStatus">
+        <option value="">Todos status</option>
+        <option value="pendente">Pendente</option>
+        <option value="paga">Paga</option>
+        <option value="vencida">Vencida</option>
+      </select>
+      <select id="fCat"><option value="">Todas categorias</option></select>
+    </section>
+
+    <section id="lista" class="lista"></section>
+  </main>
+
+  <div id="modal" class="modal" hidden>
+    <form id="form" class="modal-box" autocomplete="off">
+      <button type="button" class="fechar" id="btnFechar" aria-label="Fechar">✕</button>
+      <h2 id="mTitulo">Nova Conta</h2>
+      <input type="hidden" id="fId">
+
+      <label for="fNome">Nome da Conta</label>
+      <input id="fNome" required placeholder="Ex: Conta de Luz">
+
+      <div class="duas">
+        <div><label for="fCategoria">Categoria</label><select id="fCategoria"></select></div>
+        <div><label for="fValor">Valor (R$)</label><input id="fValor" type="number" step="0.01" min="0" inputmode="decimal" placeholder="0,00" required></div>
+      </div>
+
+      <div class="duas">
+        <div><label for="fVenc">Vencimento</label><input id="fVenc" type="date" required></div>
+        <div><label for="fSt">Status</label>
+          <select id="fSt"><option value="pendente">Pendente</option><option value="paga">Paga</option></select>
+        </div>
+      </div>
+
+      <label class="chave" for="fRec">
+        <span>Conta recorrente (mensal)</span>
+        <input id="fRec" type="checkbox"><i></i>
+      </label>
+
+      <label for="fObs">Observação (opcional)</label>
+      <textarea id="fObs" rows="3" placeholder="Detalhes adicionais..."></textarea>
+
+      <button type="submit" class="btn-primario cheio" id="btnSalvar">Adicionar</button>
+      <button type="button" class="btn-sec cheio" id="btnCancelar">Cancelar</button>
+    </form>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
