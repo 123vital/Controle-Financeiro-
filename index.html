@@ -154,6 +154,14 @@ width:100%;background:var(--campo);border:1px solid var(--borda);border-radius:.
 .chave input:focus-visible + i{outline:3px solid var(--prim);outline-offset:3px}
 #btnSalvar{margin-top:.75rem}
 
+/* Diálogo de confirmação */
+.dlg-box{gap:.6rem}
+.dlg-box h2{margin-bottom:0}
+.dlg-box p{text-align:center;color:var(--suave);font-size:clamp(.95rem,.9rem + .3vw,1.2rem);margin-bottom:.5rem}
+.dlg-btns{display:grid;gap:.6rem}
+.dlg-btns button{height:3rem;border-radius:.75rem;font-weight:600;font-size:1rem;border:1px solid var(--borda);background:transparent}
+.dlg-btns button.perigo{background:var(--ve-c);border-color:var(--ve-c);color:#fff}
+
 /* Responsivo */
 @media (min-width:720px){
 .resumo{grid-template-columns:repeat(4,1fr)}
@@ -241,6 +249,13 @@ width:100%;background:var(--campo);border:1px solid var(--borda);border-radius:.
 <button type="button" class="btn-sec cheio" id="btnCancelar">Cancelar</button>
 </form>
 </div>
+<div id="dlg" class="modal" hidden>
+<div class="modal-box dlg-box" role="dialog" aria-modal="true" aria-labelledby="dlgTitulo">
+<h2 id="dlgTitulo"></h2>
+<p id="dlgTexto"></p>
+<div id="dlgBtns" class="dlg-btns"></div>
+</div>
+</div>
 <script>
 var LS = {
 get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
@@ -249,6 +264,8 @@ set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 (function () {
 var CATEGORIAS = ['Moradia','Energia','Água','Internet','Alimentação','Transporte','Saúde','Educação','Lazer','Cartão','Outros'];
 var CHAVE = 'controle-financeiro:contas';
+var CHAVE_IGN = 'controle-financeiro:ignorar';
+var CHAVE_CORTE = 'controle-financeiro:cortes';
 var $ = function (id) { return document.getElementById(id); };
 var brl = function (v) { return 'R$ ' + Number(v).toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.'); };
 var DIAS_ALERTA = 3;
@@ -267,7 +284,43 @@ return 'id' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 };
 var contas = [];
 try { contas = JSON.parse(LS.get(CHAVE)) || []; } catch (e) { contas = []; }
+var ignorar = [];
+try { ignorar = JSON.parse(LS.get(CHAVE_IGN)) || []; } catch (e) { ignorar = []; }
+var cortes = {};
+try { cortes = JSON.parse(LS.get(CHAVE_CORTE)) || {}; } catch (e) { cortes = {}; }
 var salvar = function () { LS.set(CHAVE, JSON.stringify(contas)); };
+var salvarRegras = function () {
+LS.set(CHAVE_IGN, JSON.stringify(ignorar));
+LS.set(CHAVE_CORTE, JSON.stringify(cortes));
+};
+
+/* ---------- Diálogo de confirmação (no próprio app, sem janela do navegador) ---------- */
+var dlgResolve = null;
+function perguntar(titulo, texto, opcoes) {
+return new Promise(function (resolve) {
+dlgResolve = resolve;
+$('dlgTitulo').textContent = titulo;
+$('dlgTexto').textContent = texto;
+var box = $('dlgBtns');
+box.innerHTML = '';
+opcoes.forEach(function (o) {
+var b = document.createElement('button');
+b.type = 'button';
+b.textContent = o.t;
+if (o.cls) b.className = o.cls;
+b.onclick = function () { fecharDlg(o.v); };
+box.appendChild(b);
+});
+$('dlg').hidden = false;
+if (box.firstChild) box.firstChild.focus();
+});
+}
+function fecharDlg(valor) {
+$('dlg').hidden = true;
+var r = dlgResolve; dlgResolve = null;
+if (r) r(valor === undefined ? null : valor);
+}
+$('dlg').onclick = function (e) { if (e.target === $('dlg')) fecharDlg(null); };
 
 /* ---------- Tema ---------- */
 function aplicarTema(t) {
@@ -299,7 +352,7 @@ var mesAtual = function () { return hoje().slice(0, 7); };
 var mesSel = mesAtual(); // começa no mês atual; vazio = todos os meses
 
 /* Cria, para cada conta mensal, a cópia de cada mês seguinte até o mês atual,
-   com o valor mais recente da conta. Não duplica meses que já existem. */
+   com o valor mais recente. Respeita meses excluídos e séries encerradas. */
 function gerarRecorrentes() {
 var atual = mesAtual();
 var ultimas = {};
@@ -312,12 +365,14 @@ Object.keys(ultimas).forEach(function (k) {
 var base = ultimas[k];
 var p = base.venc.split('-').map(Number);
 var dia = p[2];
-var m = new Date(p[0], p[1], 1); // mês seguinte ao da base (p[1] já é o mês seguinte em base 0)
+var m = new Date(p[0], p[1], 1); // primeiro dia do mês seguinte ao da base
 while (true) {
 var mes = m.getFullYear() + '-' + pad(m.getMonth() + 1);
 if (mes > atual) break;
+if (cortes[base.nome] && mes >= cortes[base.nome]) break;
+var pulado = ignorar.indexOf(base.nome + '|' + mes) !== -1;
 var existe = contas.some(function (x) { return x.nome === base.nome && x.venc.slice(0, 7) === mes; });
-if (!existe) {
+if (!existe && !pulado) {
 var ultimo = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate();
 contas.push(Object.assign({}, base, {
 id: uid(), status: 'pendente', criada: hoje(),
@@ -389,7 +444,7 @@ return '<div class="item" data-id="' + c.id + '">' +
 }).join('') : '<p class="vazio">Nenhuma conta neste período. Toque em “Nova” para adicionar.</p>';
 }
 
-/* ---------- Modal ---------- */
+/* ---------- Modal de conta ---------- */
 function abrir(c) {
 $('form').reset();
 $('fId').value = c ? c.id : '';
@@ -409,7 +464,10 @@ $('btnNova').onclick = function () { abrir(); };
 $('btnFechar').onclick = fechar;
 $('btnCancelar').onclick = fechar;
 $('modal').onclick = function (e) { if (e.target === $('modal')) fechar(); };
-document.addEventListener('keydown', function (e) { if (e.key === 'Escape' || e.key === 'Esc') fechar(); });
+document.addEventListener('keydown', function (e) {
+if (e.key !== 'Escape' && e.key !== 'Esc') return;
+if (!$('dlg').hidden) fecharDlg(null); else fechar();
+});
 
 $('form').onsubmit = function (e) {
 e.preventDefault();
@@ -429,25 +487,64 @@ if (atual) Object.assign(atual, dados);
 } else {
 contas.push(Object.assign({ id: uid(), criada: hoje() }, dados));
 }
+// Se voltou a cadastrar uma conta mensal com o mesmo nome, a série volta a ser gerada
+if (dados.rec && cortes[dados.nome]) { delete cortes[dados.nome]; }
+salvarRegras();
 if (dados.venc && mesSel) mesSel = dados.venc.slice(0, 7);
 salvar(); fechar(); render();
 };
+
+/* ---------- Excluir ---------- */
+async function excluir(c) {
+var ok = await perguntar('Excluir conta', 'Excluir "' + c.nome + '"?', [
+{ t: 'Excluir', v: true, cls: 'perigo' },
+{ t: 'Cancelar', v: false }
+]);
+if (!ok) return;
+
+if (c.rec) {
+var modo = await perguntar('Conta mensal', 'Excluir somente este mês ou também os meses seguintes?', [
+{ t: 'Só este mês', v: 'um' },
+{ t: 'Este e os próximos', v: 'todos', cls: 'perigo' },
+{ t: 'Cancelar', v: null }
+]);
+if (!modo) return;
+var mesConta = c.venc.slice(0, 7);
+if (modo === 'todos') {
+cortes[c.nome] = mesConta;
+contas = contas.filter(function (x) {
+return !(x.nome === c.nome && x.rec && x.venc.slice(0, 7) >= mesConta);
+});
+} else {
+ignorar.push(c.nome + '|' + mesConta);
+contas = contas.filter(function (x) { return x.id !== c.id; });
+}
+} else {
+contas = contas.filter(function (x) { return x.id !== c.id; });
+}
+salvarRegras();
+salvar();
+render();
+}
 
 /* ---------- Ações da lista ---------- */
 $('lista').onclick = function (e) {
 var b = e.target.closest ? e.target.closest('button') : null;
 if (!b) return;
-var id = b.closest('.item').getAttribute('data-id');
+var item = b.closest('.item');
+if (!item) return;
+var id = item.getAttribute('data-id');
 var c = contas.filter(function (x) { return x.id === id; })[0];
 if (!c) return;
 var a = b.getAttribute('data-a');
-if (a === 'pagar') c.status = c.status === 'paga' ? 'pendente' : 'paga';
-else if (a === 'editar') return abrir(c);
-else if (a === 'excluir') {
-if (!confirm('Excluir "' + c.nome + '"?')) return;
-contas = contas.filter(function (x) { return x.id !== id; });
-}
+if (a === 'pagar') {
+c.status = c.status === 'paga' ? 'pendente' : 'paga';
 salvar(); render();
+} else if (a === 'editar') {
+abrir(c);
+} else if (a === 'excluir') {
+excluir(c);
+}
 };
 
 ['busca', 'fStatus', 'fCat'].forEach(function (id) { $(id).addEventListener('input', render); });
